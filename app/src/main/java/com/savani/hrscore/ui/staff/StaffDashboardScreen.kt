@@ -71,35 +71,62 @@ fun StaffDashboardScreen(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // ===== DANH SÁCH NHÂN SỰ + ĐIỂM (DATA THẬT) =====
-        Text("Danh sách nhân sự", fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
+        // ===== BODY: 1 LazyColumn để scroll tất cả =====
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
 
-        if (ui.loading) {
-            CircularProgressIndicator()
-        } else if (ui.staffScores.isEmpty()) {
-            Text("Chưa có dữ liệu", color = Color.Gray)
-        } else {
-            LazyColumn {
+            item {
+                Text("Danh sách nhân sự", fontWeight = FontWeight.Bold)
+            }
+
+            if (ui.loading) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) { CircularProgressIndicator() }
+                }
+            } else if (ui.staffScores.isEmpty()) {
+                item { Text("Chưa có dữ liệu", color = Color.Gray) }
+            } else {
                 items(ui.staffScores) { staff ->
                     StaffScoreRowItem(
                         staff = staff,
                         onClick = {
-                            // dùng field ĐÚNG theo model + JSON thật
-                            navController.navigate(
-                                "staff_detail/${staff.staffId}/${staff.name}"
-                            )
+                            navController.navigate("staff_detail/${staff.staffId}/${staff.name}")
                         }
                     )
                 }
             }
-        }
 
-        ui.error?.let {
-            Spacer(Modifier.height(12.dp))
-            Text("Lỗi: $it", color = Color.Red)
+            // ===== TOP LỖI TUẦN =====
+            item {
+                Spacer(Modifier.height(8.dp))
+                TopCodesSection(
+                    title = "🔥 Top lỗi tuần",
+                    items = ui.topWeekCodes
+                )
+            }
+
+            // ===== TOP LỖI THÁNG =====
+            item {
+                TopCodesSection(
+                    title = "📊 Top lỗi tháng",
+                    items = ui.topMonthCodes
+                )
+            }
+
+            // ===== ERROR =====
+            ui.error?.let { err ->
+                item {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Lỗi: $err", color = Color.Red)
+                }
+            }
         }
     }
 }
@@ -114,7 +141,6 @@ private fun StaffScoreRowItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
             .clickable { onClick() }
     ) {
         Row(
@@ -124,15 +150,46 @@ private fun StaffScoreRowItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // ❌ KHÔNG staffName — dùng name
             Text(staff.name, fontWeight = FontWeight.Medium)
-
-            // ❌ KHÔNG truyền Int vào Text
             Text(
                 staff.score,
                 fontWeight = FontWeight.Bold,
                 color = if (scoreInt < 90) Color.Red else Color(0xFF2E7D32)
             )
+        }
+    }
+}
+
+@Composable
+private fun TopCodesSection(
+    title: String,
+    items: List<com.savani.hrscore.network.CodeCount>
+) {
+    Text(title, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(6.dp))
+
+    // Debug nhìn cho chắc dữ liệu đã về chưa (có thể xóa sau)
+    Text("DEBUG size=${items.size}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+    Spacer(Modifier.height(6.dp))
+
+    if (items.isEmpty()) {
+        Text("Chưa có dữ liệu", color = Color.Gray)
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        items.take(10).forEachIndexed { idx, it ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("${idx + 1}. ${it.code}")
+                    Text("${it.count} lần", fontWeight = FontWeight.SemiBold)
+                }
+            }
         }
     }
 }

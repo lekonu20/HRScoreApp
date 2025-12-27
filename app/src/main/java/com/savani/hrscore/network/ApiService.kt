@@ -1,15 +1,11 @@
 package com.savani.hrscore.network
 
+import com.savani.hrscore.Constants
+import com.savani.hrscore.model.ApplyLog
 import com.savani.hrscore.model.CodeItem
 import com.savani.hrscore.model.InventoryRow
-import com.savani.hrscore.model.StaffRow
 import retrofit2.http.GET
 import retrofit2.http.Query
-import com.savani.hrscore.Constants
-import com.savani.hrscore.network.ApiListResponse
-import com.savani.hrscore.model.ApplyLog
-
-
 
 data class ApiListResponse<T>(
     val ok: Boolean,
@@ -40,7 +36,7 @@ data class ApplyLogResponse(
     val message: String? = null
 )
 
-// ===== NEW: Stats =====
+// ===== Stats / Top codes =====
 data class CodeCount(
     val code: String = "",
     val count: Int = 0
@@ -63,7 +59,7 @@ data class StatsResponse(
     val message: String? = null
 )
 
-// ===== NEW: LogWeek =====
+// ===== LogWeek =====
 data class LogWeekRow(
     val date: String = "", // yyyy-MM-dd
     val code: String = "",
@@ -80,10 +76,13 @@ data class LogWeekResponse(
 
 interface ApiService {
 
+    // ===== Top lỗi (tuần / tháng) =====
     @GET("exec")
-    suspend fun getStaff(
-        @Query("action") action: String = "getStaff"
-    ): ApiListResponse<StaffRow>
+    suspend fun getTopCodes(
+        @Query("action") action: String = "topCodes",
+        @Query("month") month: String,           // yyyy-MM
+        @Query("range") range: String            // "week" | "month"
+    ): ApiListResponse<CodeCount>
 
     @GET("exec")
     suspend fun getCodes(
@@ -110,7 +109,7 @@ interface ApiService {
         @Query("key") key: String
     ): ApplyLogResponse
 
-    // ====== CŨ: getLog (nặng) - giữ để xem chi tiết khi cần ======
+    // ===== CŨ: getLog (nặng) - giữ để xem chi tiết khi cần =====
     @GET("exec")
     suspend fun getLog(
         @Query("action") action: String = "getlog",
@@ -118,15 +117,14 @@ interface ApiService {
         @Query("month") month: String
     ): ApiListResponse<ApplyLog>
 
-
-    // ====== NEW: stats (nhẹ, dùng cho dashboard) ======
+    // ===== NEW: stats (nhẹ, dùng cho dashboard) =====
     @GET("exec")
     suspend fun getStats(
         @Query("action") action: String = "stats",
         @Query("month") month: String
     ): StatsResponse
 
-    // ====== NEW: logWeek (nhẹ, dùng khi bấm vào 1 tuần) ======
+    // ===== NEW: logWeek (nhẹ, dùng khi bấm vào 1 tuần) =====
     @GET("exec")
     suspend fun getLogWeek(
         @Query("action") action: String = "logWeek",
@@ -154,6 +152,7 @@ interface ApiService {
         @Query("action") action: String = "searchInventory",
         @Query("q") q: String
     ): ApiListResponse<InventoryRow>
+
     @GET("exec")
     suspend fun getDashboardMonth(
         @Query("action") action: String = "dashboardmonth",
@@ -162,6 +161,7 @@ interface ApiService {
         @Query("role") role: String = Constants.ROLE,
         @Query("actor") actor: String = Constants.ACTOR
     ): DashboardMonthResponse
+
     @GET("exec")
     suspend fun getStaffLog(
         @Query("action") action: String = "getlog",
@@ -171,5 +171,4 @@ interface ApiService {
         @Query("role") role: String = Constants.ROLE,
         @Query("actor") actor: String = Constants.ACTOR
     ): GetLogResponse
-
 }
