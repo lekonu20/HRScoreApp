@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,6 +17,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.savani.hrscore.Constants
 import com.savani.hrscore.data.KeyStore
@@ -22,8 +26,12 @@ import com.savani.hrscore.model.ApplyLog
 import com.savani.hrscore.model.CodeItem
 import com.savani.hrscore.network.RetrofitClient
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import java.util.Calendar
 
+/* =========================
+   STAFF DETAIL SCREEN
+========================= */
 @Composable
 fun StaffDetailScreen(
     staffId: String,
@@ -41,7 +49,6 @@ fun StaffDetailScreen(
     var msg by remember { mutableStateOf("") }
     var scoreText by remember { mutableStateOf("") }
     var logs by remember { mutableStateOf<List<ApplyLog>>(emptyList()) }
-
     var showDialog by remember { mutableStateOf(false) }
 
     fun loadDetail() {
@@ -79,6 +86,7 @@ fun StaffDetailScreen(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+
             // ===== HEADER =====
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -146,7 +154,9 @@ fun StaffDetailScreen(
                 }
             }
 
-            if (msg.isNotBlank()) Text(msg, color = MaterialTheme.colorScheme.error)
+            if (msg.isNotBlank()) {
+                Text(msg, color = MaterialTheme.colorScheme.error)
+            }
 
             // ===== LOGS =====
             Text("Lịch sử điểm/lỗi", style = MaterialTheme.typography.titleMedium)
@@ -163,14 +173,12 @@ fun StaffDetailScreen(
                             Text("Đang tải…", color = Color.Gray)
                         }
                     }
-
                     logs.isEmpty() -> {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
                             Text("Chưa có log", fontWeight = FontWeight.SemiBold)
                             Text("Bấm “Ghi lỗi/điểm” để thêm.", color = Color.Gray)
                         }
                     }
-
                     else -> {
                         LazyColumn(
                             modifier = Modifier
@@ -211,7 +219,7 @@ fun StaffDetailScreen(
         ApplyLogDialog(
             staffId = staffId,
             staffName = staffName,
-            month = month, // dùng tháng của màn detail
+            month = month,
             keyFromStore = managerKey,
             actor = Constants.ACTOR,
             role = Constants.ROLE,
@@ -221,17 +229,16 @@ fun StaffDetailScreen(
     }
 }
 
+/* =========================
+   LOG ROW
+========================= */
 @Composable
 private fun LogRowPretty(lg: ApplyLog) {
     val date = (lg.date ?: lg.createdAt ?: "").take(10)
     val code = (lg.code ?: "").trim()
     val count = lg.count ?: 1
-    val point = lg.point ?: 0.0
     val delta = lg.delta ?: 0.0
-    val by = (lg.by ?: "").trim()
-
     val isBad = delta < 0
-    val icon = if (isBad) "⚠️" else "🎁"
     val deltaColor = if (isBad) MaterialTheme.colorScheme.error else Color(0xFF2E7D32)
     val deltaText = if (delta > 0) "+$delta" else "$delta"
 
@@ -241,45 +248,17 @@ private fun LogRowPretty(lg: ApplyLog) {
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(icon, style = MaterialTheme.typography.titleLarge)
+        Text(if (isBad) "⚠️" else "🎁", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.width(10.dp))
-
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    code,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(MaterialTheme.shapes.large)
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text("x$count", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                }
-            }
-
-            Text(
-                "$date • ${if (by.isBlank()) "—" else by}",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Point: $point", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                Text("Δ $deltaText", style = MaterialTheme.typography.bodySmall, color = deltaColor, fontWeight = FontWeight.SemiBold)
-            }
+        Column(Modifier.weight(1f)) {
+            Text(code, fontWeight = FontWeight.SemiBold)
+            Text("$date • x$count • Δ $deltaText", color = deltaColor, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
 
 /* =========================
-   APPLY LOG DIALOG (PICKER LIST - CHẮC CHẮN HIỆN)
+   APPLY LOG DIALOG (DIALOG PICKER - FIXED)
 ========================= */
 @Composable
 fun ApplyLogDialog(
@@ -305,16 +284,13 @@ fun ApplyLogDialog(
     var submitting by remember { mutableStateOf(false) }
     var submitMsg by remember { mutableStateOf("") }
 
-    // ✅ KEY thật fallback
-    val key = keyFromStore?.trim().takeUnless { it.isNullOrBlank() } ?: Constants.APPLY_KEY
-
-    // picker
     var showPicker by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
 
+    val key = keyFromStore?.trim().takeUnless { it.isNullOrBlank() } ?: Constants.APPLY_KEY
+
     LaunchedEffect(Unit) {
         loadingCodes = true
-        codesMsg = ""
         try {
             val res = RetrofitClient.api.getCodes()
             if (!res.ok) throw Exception(res.message ?: "Load codes failed")
@@ -328,6 +304,15 @@ fun ApplyLogDialog(
 
     val count = countText.toIntOrNull() ?: 0
     val canSubmit = selectedCode != null && count > 0 && !submitting && !loadingCodes
+
+    // ✅ mở picker an toàn (tránh dismiss ngay)
+    val openPicker: () -> Unit = {
+        scope.launch {
+            yield()
+            search = ""
+            showPicker = true
+        }
+    }
 
     AlertDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
@@ -347,9 +332,12 @@ fun ApplyLogDialog(
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Chọn mã lỗi / thưởng") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showPicker = true }
+                        trailingIcon = {
+                            IconButton(onClick = openPicker) {
+                                Icon(Icons.Filled.ArrowDropDown, contentDescription = "Chọn mã")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     OutlinedTextField(
@@ -391,7 +379,6 @@ fun ApplyLogDialog(
                                 key = key
                             )
                             if (!res.ok) throw Exception(res.message ?: "Apply failed")
-                            submitMsg = "✅ Đã ghi ${selectedCode!!.code} x$count"
                             onApplied()
                             onDismiss()
                         } catch (e: Exception) {
@@ -408,6 +395,7 @@ fun ApplyLogDialog(
         }
     )
 
+    // ===== PICKER DIALOG =====
     if (showPicker) {
         val filtered = remember(codes, search) {
             val q = search.trim().lowercase()
@@ -418,11 +406,27 @@ fun ApplyLogDialog(
             }
         }
 
-        AlertDialog(
+        Dialog(
             onDismissRequest = { showPicker = false },
-            title = { Text("Chọn mã lỗi / thưởng") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            properties = DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = true
+            )
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = MaterialTheme.shapes.extraLarge
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("Chọn mã lỗi / thưởng", style = MaterialTheme.typography.titleMedium)
+
                     OutlinedTextField(
                         value = search,
                         onValueChange = { search = it },
@@ -431,40 +435,42 @@ fun ApplyLogDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Card {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 420.dp)
-                                .padding(vertical = 6.dp)
-                        ) {
-                            items(filtered) { item ->
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            selectedCode = item
-                                            showPicker = false
-                                        }
-                                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                                ) {
-                                    Text(
-                                        "${item.code} (${item.point})",
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    val desc = (item.desc ?: "").trim()
-                                    if (desc.isNotBlank()) {
-                                        Text(desc, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Divider()
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                    ) {
+                        items(filtered) { item ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedCode = item
+                                        showPicker = false
                                     }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                            ) {
+                                Text("${item.code} (${item.point})", fontWeight = FontWeight.SemiBold)
+                                val desc = (item.desc ?: "").trim()
+                                if (desc.isNotBlank()) {
+                                    Text(desc, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                                 }
-                                Divider(modifier = Modifier.padding(horizontal = 12.dp))
                             }
+                            Divider()
                         }
                     }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showPicker = false }) { Text("Đóng") }
+                    }
                 }
-            },
-            confirmButton = { TextButton(onClick = { showPicker = false }) { Text("Đóng") } }
-        )
+            }
+        }
     }
 }
 
